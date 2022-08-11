@@ -1,4 +1,6 @@
 const notes = require('express').Router();
+const { resolveSoa } = require('dns');
+const { json } = require('express');
 const fs = require('fs');
 
 
@@ -8,7 +10,7 @@ const fileName = 'db/db.json';
 
 //  /api/notes
 // get all of the saved notes
-notes.get('/', (req, res) => {
+notes.get('/', async (req, res) => {
     try {
         fs.readFile(fileName, 'utf-8', (err, data) => {
             err ? console.error(err) : res.json(JSON.parse(data));
@@ -18,36 +20,56 @@ notes.get('/', (req, res) => {
     }
 });
 
-notes.post('/', (req, res) => {
-    // instantiate the information entered onto the page
-    const { title, text } = req.body;
- 
-    //get the list of stored information
-    fs.readFile(fileName, 'utf-8', (err, data) => {
-        // if there is an error, console log it
-        // otherwise, run the code to append the array of list items
-        if (err) console.error(err); 
-        else {
-            // parses the information from the .json file and makes it usable
-            const noteData = JSON.parse(data);
-            // make a new note object that stores the information
+notes.post('/', async (req, res) => {
+    try {
+        const { title, text } = req.body;
+
+        fs.readFile(fileName, 'utf-8', (err, data) => {
+            data = JSON.parse(data);
+            console.log(typeof data, data);
+            // generate a new id 
+            let id;
+            if (data.length === 0) id = 1;
+            else id = data[data.length-1].id + 1;
+            // create a new note and add it to the array
             const newNote = {
-                id: data.length,
-                title,
-                text
+                id: id,
+                title: title,
+                text: text
             }
-            // adds the new note to the array of notes
-            noteData.push(newNote);
-            //writes the information to the json file
-            fs.writeFile(fileName, JSON.stringify(noteData), err => console.error(err));
-            res.json(noteData);
-        }
-    });
+            data.push(newNote);
+            // write the appended information to a json file
+            fs.writeFile(fileName, JSON.stringify(data), err => {
+                err ? res.status(500).json(err) : res.status(200).json(data);
+            })
+        });
+    } catch (err) {
+        res.json(err);
+    }
 });
 
-notes.delete('/:id', (req, res) => {
-    console.log(req.params.id);
-    res.json('all good');
+notes.delete('/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        // get the saved information from the file
+        fs.readFile(fileName, 'utf-8', (err, data) => {
+            data = JSON.parse(data);
+            // get the index of the note with the requested id
+            let index = 0;
+            data.forEach(note => {
+                if (note.id == id) return index;
+                index++;
+            });
+            // remove the note from the saved information
+            data.splice(index-1, 1);
+            // write the updated information to the new file
+            fs.writeFile(fileName, JSON.stringify(data), err => {
+                err ? res.status(500).json(err) : res.status(200).json(data);
+            })
+        });
+    } catch(err) {
+        res.json(err);
+    }
 });
 
 module.exports = notes;
